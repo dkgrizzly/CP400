@@ -1,0 +1,336 @@
+#ifndef GLOBALS_H
+#define GLOBALS_H
+
+/* Definition for enabling incrementing the R register for each M1 cycle */
+#define DO_INCR
+
+/* Definitions for enabling PUN: and LST: devices */
+// The pun.txt and lst.txt files will appear on drive A: user 0
+#define USE_PUN
+#define USE_LST
+
+/* Definitions for file/console based debugging */
+// Enables the internal debugger (enabled by default on vstudio debug builds)
+//#define DEBUG
+// Enables the internal debugger when the CPU halts
+//#define DEBUGONHALT
+// Enables instruction logging onto iDebug.log (for development debug only)
+//#define iDEBUG
+// Writes extensive call trace information to RunCPM.log
+//#define DEBUGLOG
+// Key to trigger the debugger. 4 = ^D
+//#define DEBUGKEY 4
+
+// Writes debug information to console instead of file
+//#define CONSOLELOG
+// If defined will not log this BIOS function number
+//#define LOGBIOS_NOT 01
+// If defined will log only this BIOS function number
+//#define LOGBIOS_ONLY 02
+// If defined will not log this BDOS function number
+//#define LOGBDOS_NOT 06
+// If defined will log only this BDOS function number
+//#define LOGBDOS_ONLY 22
+//#define LogName "RunCPM.log"
+
+/* RunCPM version for the greeting header */
+#define VERSION "6.3"
+#define VersionBCD 0x63
+
+/* Definition of which CCP to use (must define only one) */
+// If this is defined, an internal CCP will emulated
+#define CCP_INTERNAL
+//#define CCP_DR
+//#define CCP_CCPZ
+//#define CCP_ZCPR2
+//#define CCP_ZCPR3
+//#define CCP_Z80
+
+/* Definition of the CCP memory information */
+//
+#ifdef CCP_INTERNAL
+// Will use the CCP from ccp.h
+#define CCPname         "INTERNAL v3.0"
+// 0x10 and above reserved for Internal CCP
+#define VersionCCP      0x30
+#define BatchFCB        (tmpFCB + 48)
+// Internal CCP has size 0
+#define CCPaddr         BDOSjmppage
+#endif
+//
+#ifdef CCP_DR
+#define CCPname         "CCP-DR." STR(TPASIZE) "K"
+// Version to be used by INFO.COM
+#define VersionCCP      0x00
+// Position of the $$$.SUB fcb on this CCP
+#define BatchFCB        (CCPaddr + 0x7AC)
+// CCP memory address
+#define CCPaddr         (BDOSjmppage-0x0800)
+#endif
+//
+#ifdef CCP_CCPZ
+#define CCPname         "CCP-CCPZ." STR(TPASIZE) "K"
+#define VersionCCP      0x01
+// Position of the $$$.SUB fcb on this CCP
+#define BatchFCB        (CCPaddr + 0x7A)
+#define CCPaddr         (BDOSjmppage-0x0800)
+#endif
+//
+#ifdef CCP_ZCPR2
+#define CCPname         "CCP-ZCP2." STR(TPASIZE) "K"
+#define VersionCCP      0x02
+// Position of the $$$.SUB fcb on this CCP
+#define BatchFCB        (CCPaddr + 0x5E)
+#define CCPaddr         (BDOSjmppage-0x0800)
+#endif
+//
+#ifdef CCP_ZCPR3
+#define CCPname         "CCP-ZCP3." STR(TPASIZE) "K"
+#define VersionCCP      0x03
+// Position of the $$$.SUB fcb on this CCP
+#define BatchFCB        (CCPaddr + 0x5E)
+#define CCPaddr         (BDOSjmppage-0x1000)
+#endif
+//
+#ifdef CCP_Z80
+#define CCPname         "CCP-Z80." STR(TPASIZE) "K"
+#define VersionCCP      0x04
+// Position of the $$$.SUB fcb on this CCP
+#define BatchFCB        (CCPaddr + 0x79E)
+#define CCPaddr         (BDOSjmppage-0x0800)
+#endif
+//
+#ifndef CCPname
+#error No CCP defined
+#endif
+//
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+#define CCPHEAD         "\r\nRunCPM Version " VERSION " (CP/M " STR(TPASIZE) "K)\r\n"
+
+#define NOSLASH
+// Will translate '/' to '_' on filenames to prevent directory errors
+
+//#define STREAMIO
+// Will enable command line flags to read
+// console input from file and to log console output to file
+// Should be passed externally per-platform with -DSTREAMIO
+
+//#define PROFILE
+// For measuring time taken to run a CP/M command
+// This should be enabled only for debugging purposes when trying to improve emulation speed
+
+#define NOHIGHUSER
+// Prevents the creation of user folders above 'F' (15) by programs
+// Original CP/M BDOS allows it, but I prefer to keep the folders clean
+
+/* Definition for CP/M 2.2 user number support */
+
+// If this is defined, the $$$.SUB file will be looked for on drive A:
+#define BATCHA
+// If this is defined, the $$$.SUB file will be looked for on user area 0
+//#define BATCH0
+// The default behavior of DRI's CP/M 2.2 was to have $$$.SUB created on the current drive/user while looking for it
+// on drive A: current user, which made it complicated to run SUBMITs when not logged to drive A: user 0
+
+/* Some environment and type definitions */
+
+#ifndef TRUE
+#define FALSE 0
+#define TRUE 1
+#endif
+
+typedef signed char     int8;
+typedef signed short    int16;
+typedef signed int      int32;
+typedef unsigned char   uint8;
+typedef unsigned short  uint16;
+typedef unsigned int    uint32;
+
+#define LOW_DIGIT(x)     ((x) & 0xf)
+#define HIGH_DIGIT(x)    (((x) >> 4) & 0xf)
+#define LOW_REGISTER(x)  ((x) & 0xff)
+#define HIGH_REGISTER(x) (((x) >> 8) & 0xff)
+
+#define SET_LOW_REGISTER(x, v)  x = (((x) & 0xff00) | ((v) & 0xff))
+#define SET_HIGH_REGISTER(x, v) x = (((x) & 0xff) | (((v) & 0xff) << 8))
+
+#define WORD16(x)       ((x) & 0xffff)
+
+/* CP/M Page 0 definitions */
+#define IOByte 0x03
+#define DSKByte 0x04
+
+/* CP/M disk definitions */
+// CP/M block size
+#define BlkSZ 128
+// Number of blocks on an extension
+#define BlkEX 128
+#define ExtSZ (BlkSZ * BlkEX)
+// Number of blocks on a S2 (module)
+#define BlkS2 4096
+// Maximum value the EX field can take
+#define MaxEX 31
+// Maximum value the S2 (modules) field can take - Can be set to 63 to emulate CP/M Plus
+#define MaxS2 15
+// Maximum value the CR field can take
+#define MaxCR 128
+// Maximum value the RC field can take
+#define MaxRC 128
+
+/* CP/M memory definitions */
+#define TPASIZE 60
+// Can be 60 for CP/M 2.2 compatibility or more, up to 64 for extra memory
+// Values other than 60 or 64 would require rebuilding the CCP
+// For TPASIZE<60 CCP ORG = (SIZEK * 1024) - 0x0C00
+
+// Number of memory banks available
+#define BANKS 1
+// Number of the current RAM bank in use (1 to x, not 0 to x)
+static uint8 curBank = 1;
+// Used by BIOS
+static uint8 isXmove = FALSE;
+// Source bank for memory MOVE
+static uint8 srcBank = 1;
+// Destination bank for memory MOVE
+static uint8 dstBank = 1;
+// Destination bank for sector IO
+static uint8 ioBank = 1;
+
+// RAM(plus ROM) needs to be 64K to avoid compatibility issues
+#define PAGESIZE 64 * 1024
+// Total RAM size
+#define MEMSIZE PAGESIZE * BANKS
+
+#if BANKS==1
+// If this is defined, all RAM function calls become direct access (see below)
+// This saves about 2K on the Arduino code and should bring speed improvements
+// This feature is only available if there is only one bank of RAM
+#define RAM_FAST
+#endif
+
+#ifdef RAM_FAST
+// Makes all function calls to memory access into direct RAM access (less calls / less code)
+        static uint8 RAM[MEMSIZE];
+        #define _RamSysAddr(a)          &RAM[a]
+        #define _RamRead(a)                     RAM[a]
+        #define _RamRead16(a)           ((RAM[((a) & 0xffff) + 1] << 8) | RAM[(a) & 0xffff])
+        #define _RamWrite(a, v)         RAM[a] = v
+        #define _RamWrite16(a, v)       RAM[a] = (v) & 0xff; RAM[(a) + 1] = (v) >> 8
+#endif
+
+// Size of the allocated pages (Minimum size = 1 page = 256 bytes)
+
+// BIOS Pages (512 bytes from the top of memory)
+#define BIOSjmppage     (PAGESIZE - 512)
+#define BIOSpage        (BIOSjmppage + 256)
+
+// BDOS Pages (depends on TPASIZE for external CCPs)
+#if defined CCP_INTERNAL
+        #define BDOSjmppage (BIOSjmppage - 256)
+        #define BDOSpage (BDOSjmppage + 16)
+#else
+        #define BDOSjmppage (TPASIZE * 1024) - 1024
+        #define BDOSpage        (BDOSjmppage + 256)
+#endif
+
+// Address of the Disk Parameter Block (Hardcoded in BIOS)
+#define DPBaddr (BIOSpage + 128)
+// Address of the Disk Parameter Header
+#define DPHaddr (DPBaddr + 15)
+
+// Address of the System Control Block
+#define SCBaddr (BDOSpage + 3)
+// Address of the temporary FCB
+#define tmpFCB  (BDOSpage + 16)
+
+/* Definition of global variables */
+// Current filename in host filesystem format
+static uint8    filename[17];
+// New filename in host filesystem format
+static uint8    newname[17];
+// Current filename in CP/M format
+static uint8    fcbname[13];
+// File matching pattern in CP/M format
+static uint8    pattern[13];
+// Current dmaAddr
+static uint16   dmaAddr = 0x0080;
+// Old selected drive
+static uint8    oDrive = 0;
+// Currently selected drive
+static uint8    cDrive = 0;
+// Current user code
+static uint8    userCode = 0;
+static uint16   roVector = 0;
+static uint16   loginVector = 0;
+// true when dr is '?' in BDOS search first
+static uint8    allUsers = FALSE;
+// true when ex is '?' in BDOS search first
+static uint8    allExtents = FALSE;
+// user number of current directory in BDOS search first on all user numbers
+static uint8    currFindUser = 0;
+// disk allocation block shift
+static uint8    blockShift;
+// disk allocation block mask
+static uint8    blockMask;
+// disk extent mask
+static uint8    extentMask;
+// first allocation block after directory
+static uint16   firstBlockAfterDir;
+// # of allocation blocks on disk
+static uint16   numAllocBlocks;
+// # of logical (16K) extents in a directory entry
+static uint8    extentsPerDirEntry;
+#define logicalExtentBytes (16*1024UL)
+// # bytes described by 1 directory entry
+static uint16   physicalExtentBytes;
+
+#define tohex(x)        ((x) < 10 ? (x) + 48 : (x) + 87)
+
+/* definition of an autoexec functionality */
+// True if this is the first boot
+static uint8    firstBoot = TRUE;
+
+// Name of the autoexec file
+#define AUTOEXEC "AUTOEXEC.TXT"
+
+// If TRUE, the autoexec file will only be loaded on the first boot
+#define BOOTONLY FALSE
+
+static uint32 timer;
+
+#ifdef STREAMIO
+#include <stdio.h>
+static FILE             *streamInputFile = NULL;
+static FILE             *streamOutputFile = NULL;
+static uint8    streamInputActive = FALSE;
+static uint8    consoleOutputActive = TRUE;
+#endif
+
+
+/* Definition of externs to prevent precedence compilation errors */
+#ifdef __cplusplus // If building on Arduino
+extern "C"
+{
+#endif
+
+#ifndef RAM_FAST
+        extern uint8* _RamSysAddr(uint16 address);
+        extern void _RamWrite(uint16 address, uint8 value);
+#endif
+
+        extern void _Bdos(void);
+        extern void _Bios(void);
+
+        extern void _HostnameToFCB(uint16 fcbaddr, uint8* filename);
+        extern void _HostnameToFCBname(uint8* from, uint8* to);
+        extern void _mockupDirEntry(void);
+        extern uint8 match(uint8* fcbname, uint8* pattern);
+
+        extern void _puts(const char* str);
+
+#ifdef __cplusplus // If building on Arduino
+}
+#endif
+
+#endif

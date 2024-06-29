@@ -1,0 +1,26 @@
+/* ------------------------------------------------------- *
+// DEVICE   FILE : RUNCPM/TERMINAL
+// FILE LAST CHANGE DATE : 2024/06/29
+// RECORD FORMAT : TERMINAL
+// FORMAT LEVEL IDENTIFIER : 161818A39DDCE
+ * ------------------------------------------------------- */
+typedef _Packed struct {
+   char EXIT;         // IN01
+   char PGDN;         // IN02
+   char PGUP;         // IN03
+   char INPUT[64];
+} RUNCPM_TERMINAL_i_t;
+
+
+typedef _Packed struct {
+   char MORE;        // IN01
+   char SCREEN[72*23];
+} RUNCPM_TERMINAL_o_t;
+
+
+typedef struct {
+    RUNCPM_TERMINAL_i_t    i;
+    RUNCPM_TERMINAL_o_t    o;
+} TERMINAL_t;
+
+

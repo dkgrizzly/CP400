@@ -1,0 +1,792 @@
+#ifndef ABSTRACT_H
+#define ABSTRACT_H
+
+#include <errno.h>
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <string.h>
+#include <time.h>
+#include <recio.h>
+#include "ebcdic_h"
+#include "terminal_h"
+
+#define millis() clock()/1000
+
+#ifdef STREAMIO
+#include <termios.h>
+#endif
+
+#define HostOS 0x02
+
+_RFILE *Display;
+TERMINAL_t Terminal;
+int CharCol = 0;
+
+uint8 InputRdPtr = 0;
+uint8 InputWrPtr = 0;
+#define InputEmpty (InputRdPtr == InputWrPtr)
+#define InputFull  (InputRdPtr == ((InputWrPtr+1) & 0xFF))
+uint8 InputBuffer[256];
+
+#define LINEWIDTH 72
+uint8 OutputBuffer[100*LINEWIDTH];
+int ScrollBack = 0;
+
+typedef unsigned char bool;
+
+/* Externals for abstracted functions need to go here */
+FILE* _sys_fopen_r(uint8* filename);
+int _sys_fseek(FILE* file, long delta, int origin);
+long _sys_ftell(FILE* file);
+long _sys_fread(void* buffer, long size, long count, FILE* file);
+int _sys_fflush(FILE* file);
+int _sys_fclose(FILE* file);
+
+/* Memory abstraction functions */
+/*===============================================================================*/
+void _RamLoad(uint8* filename, uint16 address) {
+  long l;
+  FILE* file = _sys_fopen_r(filename);
+  _sys_fseek(file, 0, SEEK_END);
+  l = _sys_ftell(file);
+
+  _sys_fseek(file, 0, SEEK_SET);
+  _sys_fread(_RamSysAddr(address), 1, l, file); // (todo) This can overwrite past RAM space
+
+  _sys_fclose(file);
+}
+uint16 _RamLoadSz(uint8* filename, uint16 address, uint16 maxsize) {
+  long l;
+  FILE* file = _sys_fopen_r(filename);
+  _sys_fseek(file, 0, SEEK_END);
+  l = _sys_ftell(file);
+  if (l > maxsize)
+    l = maxsize;
+  _sys_fseek(file, 0, SEEK_SET);
+  // (todo) This can overwrite past RAM space
+  _sys_fread(_RamSysAddr(address), 1, l, file);
+
+  _sys_fclose(file);
+  return (uint16)l;
+}
+
+/* Filesystem (disk) abstraction functions */
+/*===============================================================================*/
+#define FOLDERCHAR '/'
+
+typedef struct {
+  uint8 dr;
+  uint8 fn[8];
+  uint8 tp[3];
+  uint8 ex, s1, s2, rc;
+  uint8 al[16];
+  uint8 cr, r0, r1, r2;
+} CPM_FCB;
+
+typedef struct {
+  uint8 dr;
+  uint8 fn[8];
+  uint8 tp[3];
+  uint8 ex, s1, s2, rc;
+  uint8 al[16];
+} CPM_DIRENTRY;
+
+uint8 _sys_exists(uint8* filename) {
+  return(!access((const char*)filename, F_OK));
+}
+
+FILE* _sys_fopen_r(uint8* filename) {
+  FILE *fd;
+
+  fd = fopen((const char*)filename, "rb");
+
+//if(fd == (FILE*)NULL)
+//  printf("Failed attempt to open for read '%s'\n", filename);
+
+  return fd;
+}
+
+FILE* _sys_fopen_w(uint8* filename) {
+  printf("Attempt to open for write '%s'\n", filename);
+#ifdef CAN_WRITE_FS
+  FILE *fd;
+
+  fd = fopen((const char*)filename, "wb");
+  return fd;
+#else
+  return (FILE*)NULL;
+#endif
+}
+
+FILE* _sys_fopen_rw(uint8* filename) {
+  printf("Attempt to open for read write '%s'\n", filename);
+#ifdef CAN_WRITE_FS
+  FILE *fd;
+
+  fd = fopen((const char*)filename, "r+b");
+  return fd;
+#else
+  return (FILE*)NULL;
+#endif
+}
+
+FILE* _sys_fopen_a(uint8* filename) {
+  printf("Attempt to open for append '%s'\n", filename);
+#ifdef CAN_WRITE_FS
+  FILE *fd;
+
+  fd = fopen((const char*)filename, "a");
+  return fd;
+#else
+  return (FILE*)NULL;
+#endif
+}
+
+int _sys_fseek(FILE* file, long delta, int origin) {
+  return(fseek(file, delta, origin));
+}
+
+long _sys_ftell(FILE* file) {
+  return(ftell(file));
+}
+
+long _sys_fread(void* buffer, long size, long count, FILE* file) {
+  return(fread(buffer, size, count, file));
+}
+
+long _sys_fwrite(const void* buffer, long size, long count, FILE* file) {
+#ifdef CAN_WRITE_FS
+  return(fwrite(buffer, size, count, file));
+#else
+  return 0;
+#endif
+}
+
+int _sys_fputc(int ch, FILE* file) {
+#ifdef CAN_WRITE_FS
+  return(fputc(ch, file));
+#else
+  return 0;
+#endif
+}
+
+int _sys_feof(FILE* file) {
+  return(feof(file));
+}
+
+int _sys_fflush(FILE* file) {
+  return(fflush(file));
+}
+
+int _sys_fclose(FILE* file) {
+  return(fclose(file));
+}
+
+int _sys_remove(uint8* filename) {
+#ifdef CAN_WRITE_FS
+  char *tmpname;
+  int rv;
+
+  tmpname = _sys_fixname(filename);
+  if(tmpname == NULL) return 0;
+
+  rv = remove((const char*)tmpname);
+  free(tmpname);
+  return rv;
+#else
+  return 0;
+#endif
+}
+
+int _sys_rename(uint8* name1, uint8* name2) {
+#ifdef CAN_WRITE_FS
+  char *tmpname1, *tmpname2;
+
+  tmpname1 = _sys_fixname(name1);
+  if(tmpname1 == NULL) return 0;
+  tmpname2 = _sys_fixname(name2);
+  if(tmpname2 == NULL) { free(tmpname1); return 0; }
+
+  rv = rename((const char*)tmpname1, (const char*)tmpname2));
+
+  free(tmpname1, tmpname2);
+
+  return rv;
+#else
+  return 0;
+#endif
+}
+
+int _sys_select(uint8* disk) {
+//printf("Attempt to select '%s'\n", disk);
+#if 0
+  struct stat st;
+  return((stat((char*)disk, &st) == 0) && ((st.st_mode & S_IFDIR) != 0));
+#else
+  return 1;
+#endif
+}
+
+long _sys_filesize(uint8* filename) {
+  long l = -1;
+  FILE* file = _sys_fopen_r(filename);
+  if (file != NULL) {
+    _sys_fseek(file, 0, SEEK_END);
+    l = _sys_ftell(file);
+    _sys_fclose(file);
+  }
+  return(l);
+}
+
+int _sys_openfile(uint8* filename) {
+  FILE* file = _sys_fopen_r(filename);
+  if (file != NULL)
+    _sys_fclose(file);
+  return(file != NULL);
+}
+
+int _sys_makefile(uint8* filename) {
+  FILE* file = _sys_fopen_a(filename);
+  if (file != NULL)
+    _sys_fclose(file);
+  return(file != NULL);
+}
+
+int _sys_deletefile(uint8* filename) {
+  return(!_sys_remove(filename));
+}
+
+int _sys_renamefile(uint8* filename, uint8* newname) {
+  return(!_sys_rename(&filename[0], &newname[0]));
+}
+
+#ifdef DEBUGLOG
+void _sys_logbuffer(uint8* buffer) {
+  FILE* file;
+#ifdef CONSOLELOG
+  puts((char*)buffer);
+#else
+  uint8 s = 0;
+  while (*(buffer + s))  // Computes buffer size
+    ++s;
+  file = _sys_fopen_a((uint8*)LogName);
+  _sys_fwrite(buffer, 1, s, file);
+  _sys_fclose(file);
+#endif
+}
+#endif
+
+uint8 _sys_readseq(uint8* filename, long fpos) {
+  uint8 result = 0xff;
+  uint8 bytesread;
+  uint8 dmabuf[128];
+  uint8 i;
+
+  FILE* file = _sys_fopen_r(&filename[0]);
+  if (file != NULL) {
+    if (!_sys_fseek(file, fpos, 0)) {
+      for (i = 0; i < 128; ++i)
+        dmabuf[i] = 0x1a;
+      bytesread = (uint8)_sys_fread(&dmabuf[0], 1, 128, file);
+      if (bytesread) {
+        for (i = 0; i < 128; ++i)
+          _RamWrite(dmaAddr + i, dmabuf[i]);
+      }
+      result = bytesread ? 0x00 : 0x01;
+    } else {
+      result = 0x01;
+    }
+    _sys_fclose(file);
+  } else {
+    result = 0x10;
+  }
+
+  return(result);
+}
+
+uint8 _sys_writeseq(uint8* filename, long fpos) {
+  uint8 result = 0xff;
+
+  FILE* file = _sys_fopen_rw(&filename[0]);
+  if (file != NULL) {
+    if (!_sys_fseek(file, fpos, 0)) {
+      if (_sys_fwrite(_RamSysAddr(dmaAddr), 1, 128, file))
+        result = 0x00;
+    } else {
+      result = 0x01;
+    }
+    _sys_fclose(file);
+  } else {
+    result = 0x10;
+  }
+
+  return(result);
+}
+
+uint8 _sys_readrand(uint8* filename, long fpos) {
+  uint8 result = 0xff;
+  uint8 bytesread;
+  uint8 dmabuf[128];
+  uint8 i;
+  long extSize;
+
+  FILE* file = _sys_fopen_r(&filename[0]);
+  if (file != NULL) {
+    if (!_sys_fseek(file, fpos, 0)) {
+      for (i = 0; i < 128; ++i)
+        dmabuf[i] = 0x1a;
+      bytesread = (uint8)_sys_fread(&dmabuf[0], 1, 128, file);
+      if (bytesread) {
+        for (i = 0; i < 128; ++i)
+          _RamWrite(dmaAddr + i, dmabuf[i]);
+      }
+      result = bytesread ? 0x00 : 0x01;
+    } else {
+      if (fpos >= 65536L * 128) {
+        // seek past 8MB (largest file size in CP/M)
+        result = 0x06;
+      } else {
+        _sys_fseek(file, 0, SEEK_END);
+        extSize = _sys_ftell(file);
+        // round file size up to next full logical extent
+        extSize = 16384 * ((extSize / 16384) + ((extSize % 16384) ? 1 : 0));
+        if (fpos < extSize)
+          result = 0x01;
+          // reading unwritten data
+        else
+          result = 0x04;
+          // seek to unwritten extent
+      }
+    }
+    _sys_fclose(file);
+  } else {
+    result = 0x10;
+  }
+
+  return(result);
+}
+
+uint8 _sys_writerand(uint8* filename, long fpos) {
+  uint8 result = 0xff;
+
+  FILE* file = _sys_fopen_rw(&filename[0]);
+  if (file != NULL) {
+    if (!_sys_fseek(file, fpos, 0)) {
+      if (_sys_fwrite(_RamSysAddr(dmaAddr), 1, 128, file))
+        result = 0x00;
+    } else {
+      result = 0x06;
+    }
+    _sys_fclose(file);
+  } else {
+    result = 0x10;
+  }
+
+  return(result);
+}
+
+uint8 _Truncate(char* fn, uint8 rc) {
+  uint8 result = 0x00;
+#if 0
+  if (truncate(fn, rc * 128))
+    result = 0xff;
+#endif
+  return(result);
+}
+
+void _MakeUserDir(void) {
+  uint8 dFolder = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[cDrive];
+  uint8 uFolder = "0123456789ABCDEF"[userCode];
+
+  uint8 path[4];
+  path[0] = dFolder;
+  path[1] = FOLDERCHAR;
+  path[2] = uFolder;
+  path[3] = 0;
+
+  mkdir((char*)path, S_IRUSR | S_IWUSR | S_IXUSR);
+}
+
+uint8 _sys_makedisk(uint8 drive) {
+  uint8 result = 0;
+  if (drive < 1 || drive>16) {
+    result = 0xff;
+  } else {
+    uint8 dFolder = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ"[drive];
+    uint8 disk[2];
+    disk[0] = dFolder;
+    disk[1] = 0;
+
+    if (mkdir((char*)disk, S_IRUSR | S_IWUSR | S_IXUSR)) {
+      result = 0xfe;
+    } else {
+      uint8 path[4];
+      path[0] = dFolder;
+      path[1] = FOLDERCHAR;
+      path[2] = '0';
+      path[3] = 0;
+
+      mkdir((char*)path, S_IRUSR | S_IWUSR | S_IXUSR);
+    }
+  }
+
+  return(result);
+}
+
+#ifndef POLLRDBAND
+#define POLLRDBAND 0
+#endif
+#ifndef POLLRDNORM
+#define POLLRDNORM 0
+#endif
+
+int  dirPos;
+
+static char findNextDirName[17];
+static uint16 fileRecords = 0;
+static uint16 fileExtents = 0;
+static uint16 fileExtentsUsed = 0;
+static uint16 firstFreeAllocBlock;
+
+uint8 _findnext(uint8 isdir) {
+#if 0
+  uint8 result = 0xff;
+  char dir[6] = { '?', FOLDERCHAR, 0, FOLDERCHAR, '*', 0 };
+  int i;
+  struct stat st;
+  uint32 bytes;
+
+  if (allExtents && fileRecords) {
+    // _SearchFirst was called with '?' in the FCB's EX field, so
+    // we need to return all file extents.
+    // The last found file was large enough that in CP/M it would
+    // have another directory entry, so mock up the next entry
+    // for the file.
+    _mockupDirEntry();
+    result = 0;
+  } else {
+    // Either we're only interested in the first directory entry
+    // for each file, or the previously found file has had the
+    // required number of dierctory entries returned already.
+    dir[0] = filename[0];
+    if (allUsers)
+      dir[2] = '?';
+    else
+      dir[2] = filename[2];
+    if (!glob(dir, 0, NULL, &pglob)) {
+      for (i = dirPos; i < pglob.gl_pathc; ++i) {
+        ++dirPos;
+        strncpy(findNextDirName, pglob.gl_pathv[i], sizeof(findNextDirName) - 1);
+        findNextDirName[sizeof(findNextDirName) - 1] = 0;
+        _HostnameToFCBname((uint8*)findNextDirName, fcbname);
+        if (match(fcbname, pattern) &&
+          (stat(findNextDirName, &st) == 0) &&
+          ((st.st_mode & S_IFREG) != 0) &&
+          isxdigit((uint8)findNextDirName[2]) &&
+          (isupper((uint8)findNextDirName[2]) || isdigit((uint8)findNextDirName[2]))) {
+          if (allUsers)
+            currFindUser = isdigit((uint8)findNextDirName[2]) ? findNextDirName[2] - '0' : findNextDirName[2] - 'A' + 10;
+          if (isdir) {
+            // account for host files that aren't multiples of the block size
+            // by rounding their bytes up to the next multiple of blocks
+            bytes = st.st_size;
+            if (bytes & (BlkSZ - 1))
+              bytes = (bytes & ~(BlkSZ - 1)) + BlkSZ;
+            // calculate the number of 128 byte records and 16K
+            // extents for this file. _mockupDirEntry will use
+            // these values to populate the returned directory
+            // entry, and decrement the # of records and extents
+            // left to process in the file.
+            fileRecords = bytes / BlkSZ;
+            fileExtents = fileRecords / BlkEX + ((fileRecords & (BlkEX - 1)) ? 1 : 0);
+            fileExtentsUsed = 0;
+            firstFreeAllocBlock = firstBlockAfterDir;
+            _mockupDirEntry();
+          } else {
+            fileRecords = 0;
+            fileExtents = 0;
+            fileExtentsUsed = 0;
+            firstFreeAllocBlock = firstBlockAfterDir;
+          }
+          _RamWrite(tmpFCB, filename[0] - '@');
+          _HostnameToFCB(tmpFCB, (uint8*)findNextDirName);
+          result = 0x00;
+          break;
+        }
+      }
+      globfree(&pglob);
+    }
+  }
+  return(result);
+#endif
+  return 0xff;
+}
+
+uint8 _findfirst(uint8 isdir) {
+  dirPos = 0;  // Set directory search to start from the first position
+  _HostnameToFCBname(filename, pattern);
+  fileRecords = 0;
+  fileExtents = 0;
+  fileExtentsUsed = 0;
+  return(_findnext(isdir));
+}
+
+uint8 _findnextallusers(uint8 isdir) {
+  return _findnext(isdir);
+}
+
+uint8 _findfirstallusers(uint8 isdir) {
+  dirPos = 0;
+  strcpy((char*)pattern, "???????????");
+  fileRecords = 0;
+  fileExtents = 0;
+  fileExtentsUsed = 0;
+  return(_findnextallusers(isdir));
+}
+
+/* Hardware abstraction functions */
+/*===============================================================================*/
+void _HardwareOut(const uint32 Port, const uint32 Value) {
+
+}
+
+uint32 _HardwareIn(const uint32 Port) {
+  return 0;
+}
+
+/* Host initialization functions */
+/*===============================================================================*/
+
+static void _file_failure_exit(char *argv[], char* fmt, char* filename)
+{
+  fprintf(stderr, "%s: ", argv[0]);
+  fprintf(stderr, fmt, filename);
+  if (errno) {
+    fprintf(stderr, ": %s", strerror(errno));
+  }
+  fprintf(stderr, "\n");
+  exit(EXIT_FAILURE);
+}
+
+#ifdef STREAMIO
+static void _usage(char *argv[]) {
+  fprintf(stderr,
+    "RunCPM - an emulator to run CP/M programs on modern hosts\n"
+    "usage: %s [-i input_file] [-o output_file] [-s]\n", argv[0]);
+  fprintf(stderr,
+    "  -i input_file: console input will be read from the file "
+    "with the\ngiven name. "
+    "After input file's EOF, further console input\nwill be read "
+    "from the keyboard.\n");
+  fprintf(stderr,
+    "  -o output_file: console output will be written to the file "
+    "with the\ngiven name, in addition to the screen.\n");
+  fprintf(stderr,
+    "  -s: console input and output is connected directly to "
+    "stdin and stdout.\nSince on Posix keyboard input is read from "
+    "stdin, switching from\nstdin to keyboard on stdin EOF is a "
+    "no-op. Therefore stdin EOF is an\nerror condition on Posix in "
+    "this case.\n");
+}
+
+static void _fail_if_stdin_from_tty(char* argv[]) {
+  struct termios dummyTermios;
+  if (0 == tcgetattr(0, &dummyTermios) ||
+  errno != ENOTTY) {
+  _file_failure_exit(argv,
+    "option -s is illegal when stdin comes from %s",
+    "tty");
+  }
+}
+
+static void _parse_options(int argc, char *argv[]) {
+  int c;
+  int errflg = 0;
+  while ((c = getopt(argc, argv, ":i:o:s")) != -1) {
+    switch(c) {
+      case 'i':
+        streamInputFile = fopen(optarg, "r");
+        if (NULL == streamInputFile) {
+          _file_failure_exit(argv,
+            "error opening console input file %s", optarg);
+        }
+        streamInputActive = TRUE;
+        break;
+      case 'o':
+        streamOutputFile = fopen(optarg, "w");
+        if (NULL == streamOutputFile) {
+          _file_failure_exit(argv,
+            "error opening console output file %s", optarg);
+        }
+        break;
+      case 's':
+        _fail_if_stdin_from_tty(argv);
+        streamInputFile = stdin;
+        streamOutputFile = stdout;
+        streamInputActive = TRUE;
+        consoleOutputActive = FALSE;
+        break;
+      case ':':       /* -i or -o without operand */
+        fprintf(stderr,
+          "Option -%c requires an operand\n", optopt);
+        errflg++;
+        break;
+      case '?':
+        fprintf(stderr,
+          "Unrecognized option: '-%c'\n", optopt);
+        errflg++;
+    }
+  }
+  if (errflg || optind != argc) {
+    _usage(argv);
+    exit(EXIT_FAILURE);
+  }
+}
+#endif
+
+void _host_init(int argc, char* argv[]) {
+  if(argc>1) {
+    if (chdir(argv[1])) {
+      _file_failure_exit(argv, "error performing chdir(%s)",
+        argv[1]);
+    }
+  } else
+    exit(0);
+}
+
+/* Console abstraction functions */
+/*===============================================================================*/
+
+void _console_init(void) {
+    // Open display
+    if((Display = _Ropen("RUNCPM/TERMINAL", "ar+")) == NULL) {
+        printf("Opening display failed\n");
+        exit(1);
+    }
+
+    _Rformat(Display, "TERMINAL");
+
+    memset(OutputBuffer, ' ', sizeof(OutputBuffer));
+
+    Terminal.i.EXIT = ' ';
+    memset(Terminal.i.INPUT, ' ', sizeof(Terminal.i.INPUT));
+}
+
+void _console_reset(void) {
+    _Rclose(Display);
+}
+
+void _push_input_char(uint8 ch) {
+    if(InputFull) return;
+
+    InputBuffer[InputWrPtr++] = ch;
+}
+
+int _pop_input_char(void) {
+    if(!InputEmpty) {
+        return InputBuffer[InputRdPtr++];
+    }
+    return 0;
+}
+
+int _wait_input(void) {
+    int i, a;
+
+    if(!InputEmpty) {
+        return 1;
+    }
+
+    memcpy(Terminal.o.SCREEN, OutputBuffer + sizeof(OutputBuffer) -
+            (sizeof(Terminal.o.SCREEN) + (ScrollBack * LINEWIDTH)), sizeof(Terminal.o.SCREEN));
+    Terminal.o.MORE = ScrollBack > 0 ? '1' : ' ';
+    _Rwrite(Display, &Terminal.o, sizeof(Terminal.o));
+    _Rreads(Display, &Terminal.i, sizeof(Terminal.i), __DFT);
+
+    if(Terminal.i.EXIT=='1') {
+        _console_reset();
+        exit(1);
+    }
+
+    if(Terminal.i.PGUP=='1') {
+        if(ScrollBack < ((sizeof(OutputBuffer)/LINEWIDTH) - ((sizeof(Terminal.o.SCREEN)/LINEWIDTH)+1)))
+            ScrollBack++;
+        return 0;
+    }
+
+    if(Terminal.i.PGDN=='1') {
+        if(ScrollBack > 0)
+            ScrollBack--;
+        return 0;
+    }
+
+    for(i = sizeof(Terminal.i.INPUT) - 1; i >= 0; i--) {
+        if(Terminal.i.INPUT[i] != ' ') {
+            for(a = 0; a <= i; a++)
+                _push_input_char(Terminal.i.INPUT[a]);
+          //_push_input_char('\r');
+            _push_input_char('\n');
+            return 1;
+        }
+    }
+  //_push_input_char('\r');
+    _push_input_char('\n');
+    return 0;
+}
+
+void _scroll_output(int lines) {
+    memcpy(OutputBuffer, OutputBuffer + (lines * LINEWIDTH), sizeof(OutputBuffer) - (lines * LINEWIDTH));
+    memset(OutputBuffer + sizeof(OutputBuffer) - (lines * LINEWIDTH), ' ', (lines * LINEWIDTH));
+}
+
+void _put_output_char(uint8 ch) {
+    switch(ch) {
+        case '\n':
+            _scroll_output(1);
+            CharCol = 0;
+            return;
+        case '\r':
+            CharCol = 0;
+            return;
+        default:
+            if(iscntrl(ch)) return;
+            OutputBuffer[(sizeof(OutputBuffer) - LINEWIDTH) + CharCol] = ch;
+            CharCol++;
+            if(CharCol > 79) {
+                _scroll_output(1);
+                CharCol = 0;
+            }
+            return;
+    }
+}
+
+int _kbhit(void) {
+  return _wait_input();
+}
+
+uint8 _getch(void) {
+  while(InputEmpty) _wait_input();
+  return _pop_input_char();
+}
+
+void _putch(uint8 ch) {
+  _put_output_char(ch);
+}
+
+// Get char with echo
+uint8 _getche(void) {
+  uint8 ch = _getch();
+
+  _putch(ch);
+
+  return ch;
+}
+
+void _clrscr(void) {
+    memset(OutputBuffer, ' ', sizeof(OutputBuffer));
+    CharCol = 0;
+}
+
+#endif

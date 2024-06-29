@@ -1,0 +1,34 @@
+     A                                      DSPSIZ(24 80 *DS3)
+     A          R TERMINAL
+     A                                      CF03(01 'Exit')
+     A                                      ROLLUP(02)
+     A                                      ROLLDOWN(03)
+     A            LINE01        72A  O  1  2
+     A            LINE02        72A  O  2  2
+     A            LINE03        72A  O  3  2
+     A            LINE04        72A  O  4  2
+     A            LINE05        72A  O  5  2
+     A            LINE06        72A  O  6  2
+     A            LINE07        72A  O  7  2
+     A            LINE08        72A  O  8  2
+     A            LINE09        72A  O  9  2
+     A            LINE10        72A  O 10  2
+     A            LINE11        72A  O 11  2
+     A            LINE12        72A  O 12  2
+     A            LINE13        72A  O 13  2
+     A            LINE14        72A  O 14  2
+     A            LINE15        72A  O 15  2
+     A            LINE16        72A  O 16  2
+     A            LINE17        72A  O 17  2
+     A            LINE18        72A  O 18  2
+     A            LINE19        72A  O 19  2
+     A            LINE20        72A  O 20  2
+     A            LINE21        72A  O 21  2
+     A            LINE22        72A  O 22  2
+     A            LINE23        72A  O 23  2
+     A            INPUT         64A  I 24  3CHECK(LC)
+     A                                      COLOR(WHT)
+     A  01                             24 68'-v- MORE -v-'
+     A                                      COLOR(WHT)
+     A N01                             24 70'F3: Exit'
+     A                                      COLOR(BLU)
