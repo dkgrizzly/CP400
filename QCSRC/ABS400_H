@@ -694,6 +694,7 @@ int _pop_input_char(void) {
 
 int _wait_input(void) {
     int i, a;
+    int ZMachine = 0;
 
     if(!InputEmpty) {
         return 1;
@@ -701,9 +702,27 @@ int _wait_input(void) {
 
     memcpy(Terminal.o.SCREEN, OutputBuffer + sizeof(OutputBuffer) -
             (sizeof(Terminal.o.SCREEN) + (ScrollBack * LINEWIDTH)), sizeof(Terminal.o.SCREEN));
+
+    // Show the scroll indicator if the user has scrolled up in the history.
     Terminal.o.MORE = ScrollBack > 0 ? '1' : ' ';
+
+    // Try to identify Zork style input prompts and move them to the input line to help
+    // prevent players from being confused.
+    if((ScrollBack == 0) && (Terminal.o.SCREEN[sizeof(Terminal.o.SCREEN)-LINEWIDTH] == '>')) {
+      ZMachine = 1;
+      Terminal.o.SCREEN[sizeof(Terminal.o.SCREEN)-LINEWIDTH] = ' ';
+    } else {
+      ZMachine = 0;
+    }
+    Terminal.o.ZMACHINE = ZMachine ? '1' : '0';
+
     _Rwrite(Display, &Terminal.o, sizeof(Terminal.o));
     _Rreads(Display, &Terminal.i, sizeof(Terminal.i), __DFT);
+
+    // Restore the prompt after outputting to the display
+    if(ZMachine) {
+      Terminal.o.SCREEN[sizeof(Terminal.o.SCREEN)-LINEWIDTH] = '>'; 
+    }
 
     if(Terminal.i.EXIT=='1') {
         _console_reset();
@@ -726,13 +745,13 @@ int _wait_input(void) {
         if(Terminal.i.INPUT[i] != ' ') {
             for(a = 0; a <= i; a++)
                 _push_input_char(Terminal.i.INPUT[a]);
-          //_push_input_char('\r');
-            _push_input_char('\n');
+            _push_input_char('\r');
+          //_push_input_char('\n');
             return 1;
         }
     }
-  //_push_input_char('\r');
-    _push_input_char('\n');
+    _push_input_char('\r');
+  //_push_input_char('\n');
     return 0;
 }
 
