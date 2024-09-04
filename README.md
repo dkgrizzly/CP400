@@ -27,6 +27,7 @@ Example directory structure:
           - ZORK1.COM
           - ZORK1.DAT
 
+AUTOEXEC.TXT is a simple ASCII text file containing the string ZORK1. This and the other files should be uploaded in binary mode.
 
 Launching Zork:
 `
