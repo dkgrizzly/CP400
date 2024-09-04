@@ -1,6 +1,6 @@
 /* ------------------------------------------------------- *
 // DEVICE   FILE : RUNCPM/TERMINAL
-// FILE LAST CHANGE DATE : 2024/06/29
+// FILE LAST CHANGE DATE : 2024/09/04
 // RECORD FORMAT : TERMINAL
 // FORMAT LEVEL IDENTIFIER : 161818A39DDCE
  * ------------------------------------------------------- */
@@ -14,6 +14,7 @@ typedef _Packed struct {
 
 typedef _Packed struct {
    char MORE;        // IN01
+   char ZMACHINE;    // IN02
    char SCREEN[72*23];
 } RUNCPM_TERMINAL_o_t;
 
