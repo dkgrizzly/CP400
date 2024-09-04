@@ -1,4 +1,5 @@
      A                                      DSPSIZ(24 80 *DS3)
+     A                                      INVITE
      A          R TERMINAL
      A                                      CF03(01 'Exit')
      A                                      ROLLUP(02)
@@ -32,3 +33,5 @@
      A                                      COLOR(WHT)
      A N01                             24 70'F3: Exit'
      A                                      COLOR(BLU)
+     A  02                             24  1'>'
+     A                                      COLOR(WHT)
